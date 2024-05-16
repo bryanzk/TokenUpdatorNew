@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Token Updater",
+  "name": "Token Updater with Etherscan",
   "version": "1.0",
   "permissions": [
     "activeTab",
@@ -13,7 +13,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://eigenphi.io/mev/eigentx/*"],
+      "matches": ["*://eigenphi.io/mev/eigentx/*", "*://etherscan.io/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

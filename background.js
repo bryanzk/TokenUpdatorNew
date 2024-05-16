@@ -3,7 +3,8 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
     console.log("Fetching tokens for transactions in the background...");
     console.log(request.tabId);
 
-    chrome.cookies.getAll({ url: "https://eigenphi.io" }, (cookies) => {
+    // 获取Cookies
+    chrome.cookies.getAll({ url: "https://eigenphi.io" }, async (cookies) => {
       console.log("Cookies:", cookies);
 
       let cookieHeader = "";
@@ -11,6 +12,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         cookieHeader += `${cookie.name}=${cookie.value}; `;
       });
 
+      // 进行数据抓取
       chrome.scripting.executeScript({
         target: { tabId: request.tabId },
         function: () => {
@@ -29,8 +31,8 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
               console.log("hash: " + hash);
               const tx_url = "https://eigenphi.io/mev/eigentx/" + hash;
               const ethtx_url = "https://ethtx.info/mainnet/" + hash + "/";
-              console.log("ethtx_url: " + ethtx_url);
-              transactions.push({ hash, tx_url, ethtx_url });
+              const etherscan_url = "https://etherscan.io/tx/" + hash;
+              transactions.push({ hash, tx_url, ethtx_url, etherscan_url });
             }
           });
           console.log("Fetched transactions:", transactions);
@@ -50,16 +52,17 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
 
           for (const transaction of transactions) {
             try {
-              const response = await fetch(transaction.ethtx_url, {
+              const response = await fetch(transaction.etherscan_url, {
                 credentials: 'include',
                 headers: {
+                  'Cookie': cookieHeader,
                   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' // 模拟浏览器请求
                 }
               });
 
               if (response.ok) {
                 const data = await response.text();
-
+                console.log(`Fetched TX detail page content for URL ${transaction.etherscan_url}:`, data);    
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(data, 'text/html');
                 const transfersTable = doc.querySelector('.transfers.table tbody');
@@ -78,7 +81,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
                 });
 
                 const tokens = Array.from(tokenSet);
-                console.log(`Tokens for ethtx_url ${transaction.ethtx_url}:`, tokens);
+                console.log(`Tokens for etherscan_url ${transaction.etherscan_url}:`, tokens);
                 chrome.tabs.sendMessage(
                   sender.tab.id,
                   {
@@ -91,7 +94,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
                 console.error(`Error fetching TX detail page content: ${response.statusText}`);
               }
             } catch (error) {
-              console.error(`Error fetching TX detail page content for URL ${transaction.ethtx_url}:`, error);
+              console.error(`Error fetching TX detail page content for URL ${transaction.etherscan_url}:`, error);
             }
           }
 
@@ -108,52 +111,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
 });
 
 
-//         if (result && result.length > 0 && result[0].result) {
-//           const transactions = result[0].result;
-//           console.log("Transactions:", transactions);
-
-//           transactions.forEach(transaction => {
-//             chrome.scripting.executeScript({
-//               target: { tabId: request.tabId },
-//               func: (ethtx_url, cookieHeader) => {
-//                 // console.log(`Executing TX detail page content extraction function for URL: ${ethtx_url}`);
-//                 fetch(ethtx_url, {
-//                   credentials: 'include',
-//                   headers: {
-//                     'Cookie': cookieHeader,
-//                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' //假定模拟浏览器请求
-//                   }
-//                 })
-//                 .then(response => response.text())
-//                 .then(data => {
-//                   // console.log(`Fetched TX detail page content for URL ${ethtx_url}:`, data);
-
-//                   const parser = new DOMParser();
-//                   const doc = parser.parseFromString(data, 'text/html');
-//                   // 确保 URL 没有 ?tab 参数
-//                   const cleanedDom = doc.documentElement.outerHTML.replace(/\?tab=block/g, "");
-
-//                   const cleanedDoc = new DOMParser().parseFromString(cleanedDom, 'text/html');
-//                   const transfersTable = cleanedDoc.querySelector('.transfers.table tbody');
-//                   if (!transfersTable) {
-//                     console.log("No account balance changes table found.");
-//                     return;
-//                   }
-
-//                   const tokenSet = new Set();
-//                   const rows = balanceChangeTable.querySelectorAll('tr');
-//                   console.log(`Found ${rows.length} rows in the table.`);
-//                   rows.forEach(row => {
-//                     const tokenNameCell = row.querySelectorAll('td')[1];
-//                     if (tokenNameCell) {
-//                       tokenSet.add(tokenNameCell.textContent.trim());
-//                     }
-//                   });
-
-//                   const tokens = Array.from(tokenSet);
-//                   console.log(`Tokens for tx_url ${tx_url}:`, tokens);  
-
-//                   // 未验证的eigentx 取token 逻辑
+//                   // 未验证的eigentx 取token 逻辑, could be useful
 //                   // const iconCells = Array.from(transfersTable.querySelectorAll('tbody:first-child td:nth-child(n+4)'));
 //                   // const tokens = iconCells.map(cell => {
 //                   //   const imgElement = cell.querySelector('img');
@@ -163,31 +121,3 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
 //                   //   return { iconUrl, tokenLink };
 //                   // });
 
-//                   console.log(`Tokens for tx_url ${tx_url}:`, tokens);
-//                   chrome.runtime.sendMessage({ command: "update_token", hash: tx_url.split('/').pop(), tokens: tokens });
-//                 })
-//                 .catch(error => {
-//                   console.error(`Error fetching TX detail page content for URL ${tx_url}:`, error);
-//                 });
-//               },
-//               args: [transaction.ethtx_url, cookieHeader]
-//             }, (fetchResult) => {
-//               if (chrome.runtime.lastError) {
-//                 console.error("Error executing TX detail page content extraction:", chrome.runtime.lastError.message);
-//               } else {
-//                 console.log("fetchTokenFromP2 result:", fetchResult);
-//               }
-//             });
-//           });
-
-//           sendResponse({ result: "Fetching tokens started" });
-//         } else {
-//           console.error("No transactions found or result is empty.");
-//           sendResponse({ error: "No transactions found or result is empty." });
-//         }
-//       });
-//     });
-
-//     return true;  // Keeps the messaging channel open for the sendResponse
-//   }
-// });
