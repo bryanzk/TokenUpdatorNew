@@ -1,121 +1,144 @@
-
-
-// // function updateTokens() {
-// //     const table = document.querySelector('[role="table"]'); // 确保这是指向正确的表格选择器
-// //     if (table) {
-// //       const rows = table.querySelectorAll('tr');
-// //       rows.forEach((row, index) => {
-// //         // 跳过标题行
-// //         if (index !== 0) {
-// //           // 假设cells中的索引正确对应Amount、Price和Tokens数据
-// //             const cells = row.querySelectorAll('td');
-// //         //   const amount = parseFloat(cells[2].textContent.replace(/,/g, ''));
-// //         //   const price = parseFloat(cells[3].textContent.replace(/,/g, ''));
-// //         //   const tokens = amount * price;
-// //             const amount = parseFloat(cells[2].textContent.replace(/,/g, ''));
-        
-// //             cells[3].textContent = tokens.toFixed(2); // 格式化为两位小数
-// //             console.log("updating");
-// //         }
-// //       });
-// //     }
-// //   }
-  
-// //   // 暴露函数给background.js使用
-// //   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-// //     if (message.command === "update_tokens") {
-// //       updateTokens();
-// //       sendResponse({result: "Tokens updated"});
-// //     }
-// //   });
-  
-
-// // chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-// //   if (message.command === "update_tokens") {
-// //     updateTokens(); // Call the update function directly
-// //     sendResponse({ status: "tokens updated" });
-// //   }
-// // });
-
-// // function updateTokens() {
-// //   console.log("Updating tokens in content script");
-
-// //   const table = document.querySelector('[role="table"]'); // Ensure this matches the actual table on your webpage
-// //   if (table) {
-// //     const rows = table.querySelectorAll('tr');
-// //     rows.forEach((row, index) => {
-// //       if (index !== 0) { // Skip the header row
-// //         const cells = row.querySelectorAll('td');
-// //         const amount = parseFloat(cells[2].textContent.replace(/,/g, ''));
-// //         const price = parseFloat(cells[3].textContent.replace(/,/g, ''));
-// //         const tokens = amount * price;
-
-// //         cells[4].textContent = tokens.toFixed(2); // Update Tokens column
-// //       }
-// //     });
-// //   }
-// // }
-
-// // content.js (P1)
-// function fetchTransactionHashes() {
-//   const rows = document.querySelectorAll('table tr');
-//   const transactions = [];
-
-//   rows.forEach(row => {
-//     const cells = row.querySelectorAll('td');
-//     if (cells.length > 0) {
-//       // Assuming the first cell (index 0) is the "txn hash" column
-//       const hashCell = cells[0].querySelector('a');
-//       console.log(hashCell);
-//       const tokenCell = cells[3];
-//       if (hashCell && hashCell.href) {
-//         const urlParts = hashCell.href.split('/');
-//         const hash = urlParts[urlParts.length - 1]; // The last part of the URL is the hash
-//         transactions.push({ hash, row, tokenCell });
-//       }
-//     }
-//   });
-
-//   return transactions;
-// }
-
-// chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-//   if (message.command === "update_token" && message.hash && message.tokens) {
-//     console.log(`Updating tokens for transaction ${message.hash}`);
-//     const transaction = transactions.find(t => t.hash === message.hash);
-//     if (transaction) {
-//       transaction.tokenCell.textContent = message.tokens;
-//     }
-//   }
-//   return true;
-// });
-
-// // Start the process to fetch tokens for each transaction
-// document.addEventListener('DOMContentLoaded', function() {
-//   const transactions = fetchTransactionHashes();
-//   chrome.runtime.sendMessage({
-//     command: "fetch_tokens",
-//     transactions: transactions
-//   });
-// });
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.command === "update_token" && message.hash && message.tokens) {
+  if (message.command === "update_token") {
+    const { hash, tokens } = message;
     const rows = document.querySelectorAll('table tr');
+
     rows.forEach(row => {
       const cells = row.querySelectorAll('td');
       if (cells.length > 0) {
         const hashCell = cells[0].querySelector('a');
-        if (hashCell && hashCell.href) {
-          const urlParts = hashCell.href.split('/');
-          const hash = urlParts[urlParts.length - 1];
-          if (hash === message.hash) {
-            const tokenCell = cells[3];
-            tokenCell.textContent = message.tokens;
-          }
+        if (hashCell && hashCell.href.includes(hash)) {
+          const tokenCell = cells[3];
+          tokenCell.innerHTML = ''; // 清空当前内容
+          tokens.forEach(token => {
+            const div = document.createElement('div');
+            div.textContent = token;
+            tokenCell.appendChild(div);
+          });
         }
       }
     });
+
+    sendResponse({ status: "Tokens updated" });
+    return true;
   }
-  return true;
 });
+
+// chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+//   if (request.command === "fetch_tokens" && request.tabId) {
+//     console.log("Fetching tokens for transactions in the background...");
+
+//     chrome.cookies.getAll({ url: "https://eigenphi.io" }, (cookies) => {
+//       if (chrome.runtime.lastError) {
+//         console.error("Error getting cookies:", chrome.runtime.lastError);
+//         sendResponse({ error: chrome.runtime.lastError });
+//         return;
+//       }
+
+//       console.log("Cookies:", cookies);
+
+//       let cookieHeader = "";
+//       cookies.forEach(cookie => {
+//         cookieHeader += `${cookie.name}=${cookie.value}; `;
+//       });
+
+//       chrome.scripting.executeScript({
+//         target: { tabId: request.tabId },
+//         function: () => {
+//           console.log("Injected fetchTransactionHashes function is initialized.");
+//           console.log("Starting to iterate the table...");
+
+//           const table = document.querySelector('.mantine-Table-root.mantine-1orkbxt');
+//           const rows = table.querySelectorAll('tr');
+//           console.log(`Found ${rows.length} rows in the table.`);
+
+//           const transactions = [];
+//           console.log("tx counts:" + rows.length);
+//           rows.forEach(row => {
+//             const tx_url_alink = row.querySelectorAll('.mantine-Text-root.mantine-1y2m7rb a')[0];
+//             if (tx_url_alink) {
+//               const hash = tx_url_alink.getAttribute('href').split('/mev/eigentx/')[1].split('?')[0];
+//               console.log("hash: " + hash);
+//               const tx_url = "https://eigenphi.io/mev/eigentx/" + hash;
+//               transactions.push({ hash, tx_url });
+//             }
+//           });
+//           console.log("Fetched transactions:", transactions);
+
+//           return transactions;
+//         }
+//       }, (result) => {
+//         if (chrome.runtime.lastError) {
+//           console.error("Error executing fetchTransactionHashes:", chrome.runtime.lastError.message);
+//           sendResponse({ error: chrome.runtime.lastError.message });
+//           return;
+//         }
+
+//         if (result && result.length > 0 && result[0].result) {
+//           const transactions = result[0].result;
+//           console.log("Transactions:", transactions);
+
+//           transactions.forEach(transaction => {
+//             console.log(`Fetching details for transaction: ${transaction.tx_url}`);
+//             fetch(transaction.tx_url, {
+//               credentials: 'include',
+//               headers: {
+//                 'Cookie': cookieHeader,
+//                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+//                 'Referer': 'https://eigenphi.io'
+//               }
+//             })
+//             .then(response => {
+//               if (response.redirected) {
+//                 console.log("Detected redirection.");
+//                 const redirectedUrl = response.url.split('?')[0];
+//                 return fetch(redirectedUrl, {
+//                   credentials: 'include',
+//                   headers: {
+//                     'Cookie': cookieHeader,
+//                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, Gecko) Chrome/91.0.4472.124 Safari/537.36',
+//                     'Referer': 'https://eigenphi.io'
+//                   }
+//                 });
+//               }
+//               return response.text();
+//             })
+//             .then(data => {
+//               console.log(`Fetched TX detail page content for URL ${transaction.tx_url}:`, data);
+//               const parser = new DOMParser();
+//               const doc = parser.parseFromString(data, 'text/html');
+
+//               const balanceChangeTable = doc.querySelector('#account-balance-changes');
+//               if (!balanceChangeTable) {
+//                 console.log("No account balance changes table found.");
+//                 return;
+//               }
+
+//               const iconCells = Array.from(balanceChangeTable.querySelectorAll('tr:first-child td:nth-child(n+4)'));
+//               const tokens = iconCells.map(cell => {
+//                 const imgElement = cell.querySelector('img');
+//                 const aElement = cell.querySelector('a');
+//                 const iconUrl = imgElement ? imgElement.src : '';
+//                 const tokenLink = aElement ? aElement.href.split('?')[0] : '';
+//                 return { iconUrl, tokenLink };
+//               });
+
+//               console.log(`Tokens for tx_url ${transaction.tx_url}:`, tokens);
+//               chrome.runtime.sendMessage({ command: "update_token", hash: transaction.tx_url.split('/').pop(), tokens: tokens });
+//             })
+//             .catch(error => {
+//               console.error(`Error fetching TX detail page content for URL ${transaction.tx_url}:`, error);
+//             });
+//           });
+
+//           sendResponse({ result: "Fetching tokens started" });
+//         } else {
+//           console.error("No transactions found or result is empty.");
+//           sendResponse({ error: "No transactions found or result is empty." });
+//         }
+//       });
+//     });
+
+//     return true;  // Keeps the messaging channel open for the sendResponse
+//   }
+// });
